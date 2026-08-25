@@ -1,0 +1,123 @@
+# kneescope
+
+Measure the **persistence boundary** σ\* of Muon-style optimizer momentum during
+training, and report the transition band [σ\*, σ\*_upper] that tells you where to
+place the whitening knee (`knee50`) of the Newton–Schulz spectral response.
+
+## What it measures
+
+Muon-family optimizers orthogonalize the momentum matrix with a Newton–Schulz
+iteration whose scalar spectral response has a *knee*: directions below the knee
+are suppressed, directions above it are whitened. Placing that knee well requires
+knowing which singular directions of the momentum matrix carry **persistent
+gradient signal** and which carry only **fresh noise**. kneescope measures exactly
+this, per shape group (matrices with the same `(rows, cols)` are pooled; there is
+never one global number).
+
+For each 2D momentum matrix `M` (the EMA-of-gradients matrix fed into the
+orthogonalization, post-EMA/nesterov, pre-normalization) the estimator takes the
+F-normalized SVD (`Σσ² = 1`) and projects ≥ 2 independent micro-batch gradients
+`G_a` onto the singular directions: `d[a,k] = u_kᵀ G_a v_k`. The cross-microbatch
+signal energy `s2_k = mean_{a<b} d[a,k]·d[b,k]` stacks persistent signal while
+independent fresh noise averages to zero. The **persistence ratio** is
+`ρ_k = s2_k / σ_k²`, with an estimator noise floor
+`floor_k = max(Var_a(d_k) − s2_k, 0) / √n_pairs / σ_k²`. Persistent directions
+have ρ ≈ 1; pure-noise directions have ρ ≈ 0. Per-direction values are binned by
+log σ; per bin the tool reports the **median** ρ and **median** floor (the median
+is essential — the floor blows up at tiny σ), and `excess = medianρ − medianfloor`.
+
+σ\* is the lower edge of the first bin (from low σ) whose excess ≥ 0.3, and
+σ\*_upper the lower edge of the first bin whose excess ≥ 0.9 (both thresholds
+configurable). For a single-knee schedule the recommended `knee50` is **σ\*_upper,
+not σ\***. An optional Marchenko–Pastur diagnostic (λ₊ spike peeling + bulk KS
+check) is provided for comparison, but it is assumption-laden and known to fail on
+heavy-tailed real spectra — the core estimator is assumption-free. This tool
+accompanies the working draft *"The Persistence Boundary"* (companion paper),
+which derives the theory and the scheduling consequences.
+
+## Install
+
+```bash
+pip install -e .            # core: numpy only
+pip install -e '.[torch]'   # PyTorch capture adapter
+pip install -e '.[matplotlib]'  # plotting
+pip install -e '.[mlx]'     # reserved for an MLX adapter (macOS only)
+pip install -e '.[dev]'     # pytest + matplotlib, for running tests
+```
+
+## Quickstart (PyTorch)
+
+```python
+from kneescope.capture.torch import TorchKneeProbe
+from kneescope import analyze
+
+probe = TorchKneeProbe(model, steps={300, 600}, out_dir="knees", optimizer=opt)
+probe.begin_microbatches(step)                     # before the micro-batch loop
+with probe.capture_microbatch(loss): loss.backward()  # per micro-batch
+probe.maybe_snapshot_momentum(step)                # right before opt.step()
+
+result = analyze("knees")
+print(result.text())
+```
+
+Only three lines touch the training loop. Capture is a no-op outside the listed
+probe steps, so steady-state overhead is zero.
+
+## Snapshot format
+
+```
+<snapdir>/
+  manifest.json           # {"format_version": 1, "created_by": ..., "steps": [int],
+                          #  "n_microbatches": int, "notes": {...}}
+  mom_step{k}.npz         # one entry per parameter path: the 2D momentum matrix FED
+                          # INTO the orthogonalization (post-EMA/nesterov,
+                          # pre-normalization), stored float32
+  grad_step{k}_mb{j}.npz  # same paths, micro-batch gradient j at its true
+                          # per-microbatch scale (NOT divided by accumulation count)
+```
+
+npz keys are parameter paths such as `blocks.3.attn.wq.weight`. Stacked expert
+tensors are split by the capturing adapter into individual 2D matrices with
+synthesized paths such as `blocks.3.mlp.experts.gu[e37]`. Any tool can produce
+this format; `kneescope.SnapshotWriter` is the reference writer and
+`kneescope.load_snapshot(dir)` the validating reader.
+
+## Reading the report
+
+Per probed step and shape group you get the binned table (`σ` range, count,
+median ρ, median floor, excess), then:
+
+- **σ\*** — lower edge of the first bin with excess ≥ 0.30: persistent signal is
+  essentially gone below this σ.
+- **σ\*_upper** — lower edge of the first bin with excess ≥ 0.90: persistent
+  signal dominates above this σ.
+- **recommended knee50 = σ\*_upper** for a single-knee schedule.
+- **noise anisotropy** (row/col second-moment ratios of the centered residual
+  gradients, 1.0 = isotropic).
+- optional **MP diagnostic**: λ̂₊ median, noise-energy share ŵ, spike count, and a
+  KS shape check of the pooled bulk against the MP law.
+
+> **WARNING — do NOT place the knee at σ\*** with a binary zero-below/flat-above
+> rule. The companion paper (§8) shows this harms long-horizon training: σ\* is
+> where signal *starts* to dominate, not where it is fully recovered. Place
+> `knee50` at the **upper** band edge σ\*_upper (or use a smooth schedule across
+> the band).
+
+If no bin crosses a threshold — because signal persists at every visible σ or
+never does — the group is reported as **"no collapse in view"** and no number is
+invented. Likewise, if signal is already persistent at the lowest visible bin,
+the boundary lies below the measurement window and is reported as such.
+
+## Validation scope
+
+The estimator and the band definitions were validated in one codebase at 132M and
+1080M parameters, in bf16, over micro-steps 300–1900. The iid reading of the
+chance floor is approximate under anisotropic noise — that is exactly why the
+anisotropy diagnostic is printed alongside every group; distrust floor margins
+when the row/col ratios depart strongly from 1. The MP diagnostic is validated
+only on synthetic spiked spectra (where it recovers λ₊ to a few percent) and is
+expected to mislead on heavy-tailed real momentum spectra.
+
+## License
+
+MIT. See `LICENSE`.
