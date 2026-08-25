@@ -180,9 +180,23 @@ class TorchKneeProbe:
         have been recorded, then flushes to disk and closes itself.
         """
         if step not in self.steps:
+            if self._mb_step is not None and self._mb_stash:
+                import warnings
+                warnings.warn(
+                    f"begin_microbatches({step}): discarding {len(self._mb_stash)}/"
+                    f"{self.n_microbatches} unflushed micro-batch gradients from "
+                    f"step {self._mb_step} (probe window closed without flush)"
+                )
             self._mb_step = None
             self._mb_stash = []
             return False
+        if self._mb_step is not None and self._mb_stash and self._mb_step != step:
+            import warnings
+            warnings.warn(
+                f"begin_microbatches({step}): discarding {len(self._mb_stash)}/"
+                f"{self.n_microbatches} unflushed micro-batch gradients from "
+                f"step {self._mb_step} (probe window reopened for new step)"
+            )
         self._mb_step = int(step)
         self._mb_stash = []
         return True

@@ -155,8 +155,11 @@ def _zipf_slope(S: NDArray[np.float64]) -> float:
     heavy-tailed signal-spectrum signature.
     """
     k = S.size
+    if k < 4:
+        return float("nan")
     k_mid = k // 4
     idx = np.arange(k_mid, max(k_mid + 2, 3 * k // 4))
+    idx = idx[idx < k]
     if idx.size >= 2 and np.all(S[idx] > 0):
         return float(np.polyfit(np.log(idx + 1), np.log(S[idx]), 1)[0])
     return float("nan")
@@ -180,6 +183,6 @@ def anisotropy_ratios(
     r_col = float("nan")
     if row_noise.size and row_noise.mean() > 0:
         r_row = float((row_noise.var() / row_noise.mean() ** 2) / (2.0 / n))
-    if col_noise.size and col_noise.mean() > 0:
+    if col_noise.size > 0 and col_noise.mean() > 0:
         r_col = float((col_noise.var() / col_noise.mean() ** 2) / (2.0 / m))
     return r_row, r_col
