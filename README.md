@@ -14,6 +14,12 @@ whitening knee. And the companion paper shows the benchmark: **the quality-optim
 knee sits at the band's *upper* edge, not at σ*.** Putting it at σ* is a trap
 that looks fine short-term and quietly destroys long-horizon training.
 
+<p align="center">
+  <img src="figures/fig0_hero.png" alt="kneescope measures the persistence boundary: the binned persistent-signal fraction ρ(σ) collapses across a measurable transition band [σ*, σ*_upper] on two shape groups. Rendered by kneescope's own estimator on ground-truth synthetic spiked data." width="900" />
+  <br><em>The measurement, in one picture. The persistent-signal fraction ρ(σ) (blue) and its estimator floor (grey) are binned by log σ. Signal vanishes below the lower edge σ* (red). It is not recovered at σ* — it <b>climbs across a band</b>, reaching the upper edge σ*_upper (green), where a single-knee schedule should place <code>knee50</code>. Rendered directly by <code>kneescope.analyze()</code> on ground-truth data; two independent shape groups shown.</em>
+</p>
+
+
 ---
 
 ## The headline results
@@ -36,6 +42,12 @@ micro-steps 300→1900. No random-matrix assumptions required. σ* is *not* mono
 in matrix size or aspect ratio: within-MoE variation (30×) is as large as the
 cross-architecture shift.
 
+<p align="center">
+  <img src="figures/fig1_persistence.png" alt="Direction persistence collapses at sigma* and is stationary across micro-steps 300 to 1900, shown for two shape groups with the transition band shaded." width="900" />
+  <br><em>Fig. 1 from the companion paper. ρ(σ) collapses sharply at σ* and does not move across the probed window (micro-steps 300→1900); the shaded band is the measured transition region. This is what σ* <b>is</b> — a measurable collapse, not a fitted constant.</em>
+</p>
+
+
 **3. It's a band, not a step — and the optimum is at the top edge.** σ* is the
 *lower* edge of a transition band whose persistent-signal fraction climbs ≈0.3→1.
 The two arms of the U-shaped quality curve are exactly the band's width:
@@ -45,6 +57,12 @@ The two arms of the U-shaped quality curve are exactly the band's width:
 | at σ* (lower edge) | **+0.054 nat** |
 | **at σ*_upper (optimum)** | **peak** |
 | past σ*_upper | **+0.085 nat** |
+
+<p align="center">
+  <img src="figures/fig2_ucurve.png" alt="U-shaped quality curve on two architectures with the measured transition band shaded." width="900" />
+  <br><em>Fig. 2 — the money picture. Left: on the 1080M MoE, Δloss@500 vs. knee50 is U-shaped, and the two arms land exactly on the shaded band's edges (paired floor ±0.05; bars are the 3-seed arm range). Right: the dense 132M model's five-point grid at the 500-step tier. Quality is <b>not</b> monotone in how accurately the spectral map is applied.</em>
+</p>
+
 
 **4. Replicates across architectures — with a horizon twist.** On a 132M dense
 model σ* is ~10× lower than on the 1080M MoE, and the warmup-tier optimum moves
@@ -62,6 +80,12 @@ step ≈800 and grows to **+0.18 nat**, with 4/5 of the regression in the auxili
 MTP loss (**+0.47 nat**). The damage lands exactly in the groups the corrected law
 flags (lowest σ*, widest band, heaviest tails). A law that calls its own naive
 misreading's failure mode, in advance and in the right place, is doing work.
+
+<p align="center">
+  <img src="figures/fig4_pareto_reversal.png" alt="EdgeCubic looks promotable at 500 steps (left) but reverses monotonically by 2000 steps (right), with the regression concentrated in the MTP loss." width="900" />
+  <br><em>Fig. 4 — the law's stress test. Left: the naive per-shape σ* rule (EdgeCubic) is quality-neutral at 500 steps and <b>faster</b> (+5.4% throughput), so a warmup gate promotes it. Right: by 2000 steps it reverses monotonically — Δloss crosses zero at step ≈800 and grows to +0.18 nat, with the MTP component (dashed) carrying most of the harm (+0.47 nat), localized exactly where the corrected law flags the widest bands.</em>
+</p>
+
 
 ---
 
@@ -95,6 +119,12 @@ check) is provided for comparison, but it is assumption-laden and known to fail 
 heavy-tailed real spectra — the core estimator is assumption-free. This tool
 accompanies the working draft *"The Persistence Boundary"* (companion paper),
 which derives the theory and the scheduling consequences.
+
+<p align="center">
+  <img src="figures/fig0_mechanism.png" alt="Five-step kneescope measurement pipeline: F-normalize the momentum matrix and take its SVD; project two or more independent micro-batch gradients onto the singular directions; stack cross-microbatch signal energy; form the persistence ratio; bin by log sigma to find the band edges." width="900" />
+  <br><em>What it measures, end to end. No distributional assumption enters: independent fresh noise cancels across micro-batches while persistent signal stacks, so ρ(σ) separates the two without a model.</em>
+</p>
+
 
 ## Papers
 
@@ -190,6 +220,12 @@ anisotropy diagnostic is printed alongside every group; distrust floor margins
 when the row/col ratios depart strongly from 1. The MP diagnostic is validated
 only on synthetic spiked spectra (where it recovers λ₊ to a few percent) and is
 expected to mislead on heavy-tailed real momentum spectra.
+
+<p align="center">
+  <img src="figures/fig3_scaling.png" alt="Three scaling checks: per-group sigma* spans 30x and is not an MP ratio; batch halving does not confirm sqrt(B) scaling; per-head reshaping is harmless post-fix." width="900" />
+  <br><em>Fig. 3 — where the naive scaling laws break down. (i) Measured σ* spans ~30× across shape groups: it is a <b>per-shape-group</b> number, not an MP ratio. (ii) Halving the effective batch does <b>not</b> confirm the √B knee law. (iii) Per-head reshaping is harmless post-fix — per-group measurement replaces the MP-motivated compensation.</em>
+</p>
+
 
 ## License
 
