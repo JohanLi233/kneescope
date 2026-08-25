@@ -35,6 +35,18 @@ heavy-tailed real spectra — the core estimator is assumption-free. This tool
 accompanies the working draft *"The Persistence Boundary"* (companion paper),
 which derives the theory and the scheduling consequences.
 
+## Papers
+
+The companion paper and its supporting research notes are bundled in
+[`papers/`](papers/README.md):
+
+- **The Persistence Boundary** (working draft v3, 2026-08-25) — markdown,
+  LaTeX, compiled PDF, and fig1–fig4 under
+  [`papers/the_persistence_boundary/`](papers/the_persistence_boundary/).
+- Supporting research notes — spectral/RMT theory, the optimizer research
+  program, and the experiment protocol under
+  [`papers/references/`](papers/references/).
+
 ## Install
 
 ```bash
