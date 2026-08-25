@@ -1,8 +1,69 @@
 # kneescope
 
-Measure the **persistence boundary** σ\* of Muon-style optimizer momentum during
-training, and report the transition band [σ\*, σ\*_upper] that tells you where to
-place the whitening knee (`knee50`) of the Newton–Schulz spectral response.
+## Don't tune the knee. Measure it.
+
+Muon-style optimizers whiten momentum with a Newton–Schulz iteration whose
+spectral response has a **knee**: directions below it get suppressed, directions
+above it get whitened. Where to place that knee has been a hand-tuned
+hyperparameter — until now. **kneescope turns it into a measurement.**
+
+It reads the *persistence boundary* — the threshold where momentum directions
+carrying persistent gradient signal give way to fresh noise — and reports the
+`[σ*, σ*_upper]` transition band, the one number you actually need to place the
+whitening knee. And the companion paper shows the benchmark: **the quality-optimal
+knee sits at the band's *upper* edge, not at σ*.** Putting it at σ* is a trap
+that looks fine short-term and quietly destroys long-horizon training.
+
+---
+
+## The headline results
+
+These come from the companion paper, *"The Persistence Boundary"* (working draft
+v3, 2026-08-25), measured on a real 1080M MoE (M4 Max, bf16) and validated on a
+132M dense model.
+
+**1. The textbook answer is wrong on real data.** Random-matrix theory says the
+knee belongs at the Marchenko–Pastur bulk edge λ₊. It fails here: real momentum
+spectra are smooth heavy-tailed (Zipf slopes −0.7…−2.7), entry noise is
+anisotropic at ratios of 10²–10⁴, and spike peeling diverges. **Neither closed-form
+scaling law survived** (knee ∝ (1/√m+1/√n), and knee ∝ √B both unconfirmed). The
+whole *qualitative* frame — U-shape, knee = persistence boundary, zero weight below
+σ* — did.
+
+**2. There is a clean, assumption-free boundary.** Cross-microbatch direction
+persistence ρ(σ) collapses sharply at a measurable boundary σ*, stationary across
+micro-steps 300→1900. No random-matrix assumptions required. σ* is *not* monotone
+in matrix size or aspect ratio: within-MoE variation (30×) is as large as the
+cross-architecture shift.
+
+**3. It's a band, not a step — and the optimum is at the top edge.** σ* is the
+*lower* edge of a transition band whose persistent-signal fraction climbs ≈0.3→1.
+The two arms of the U-shaped quality curve are exactly the band's width:
+
+| knee placement | loss@500 vs. optimum |
+|---|---|
+| at σ* (lower edge) | **+0.054 nat** |
+| **at σ*_upper (optimum)** | **peak** |
+| past σ*_upper | **+0.085 nat** |
+
+**4. Replicates across architectures — with a horizon twist.** On a 132M dense
+model σ* is ~10× lower than on the 1080M MoE, and the warmup-tier optimum moves
+with it (five-point grid). But by **2000 steps the dense ranking reverses**: the
+lowest knee destabilizes (NaN after a step-600 spike), the mid-band point concedes
+0.07 nat, and the shared steady-state optimum sits at the band's *upper* edge
+(knee50 ≈ 0.01) on **both** architectures. Under-whitening is paid upfront;
+variance injection compounds.
+
+**5. The naive reading fails — and that failure *proves* the law.** The
+engineering shortcut "set each knee at its measured σ*" (EdgeCubic) is neutral at
+500 steps (+0.007 nat, within the ±0.05 floor) at +5.4% throughput — it passed the
+pre-registered bar. By 2000 steps it reverses monotonically: Δloss crosses zero at
+step ≈800 and grows to **+0.18 nat**, with 4/5 of the regression in the auxiliary
+MTP loss (**+0.47 nat**). The damage lands exactly in the groups the corrected law
+flags (lowest σ*, widest band, heaviest tails). A law that calls its own naive
+misreading's failure mode, in advance and in the right place, is doing work.
+
+---
 
 ## What it measures
 
@@ -26,10 +87,10 @@ have ρ ≈ 1; pure-noise directions have ρ ≈ 0. Per-direction values are bin
 log σ; per bin the tool reports the **median** ρ and **median** floor (the median
 is essential — the floor blows up at tiny σ), and `excess = medianρ − medianfloor`.
 
-σ\* is the lower edge of the first bin (from low σ) whose excess ≥ 0.3, and
-σ\*_upper the lower edge of the first bin whose excess ≥ 0.9 (both thresholds
-configurable). For a single-knee schedule the recommended `knee50` is **σ\*_upper,
-not σ\***. An optional Marchenko–Pastur diagnostic (λ₊ spike peeling + bulk KS
+σ* is the lower edge of the first bin (from low σ) whose excess ≥ 0.3, and
+σ*_upper the lower edge of the first bin whose excess ≥ 0.9 (both thresholds
+configurable). For a single-knee schedule the recommended `knee50` is **σ*_upper,
+not σ***. An optional Marchenko–Pastur diagnostic (λ₊ spike peeling + bulk KS
 check) is provided for comparison, but it is assumption-laden and known to fail on
 heavy-tailed real spectra — the core estimator is assumption-free. This tool
 accompanies the working draft *"The Persistence Boundary"* (companion paper),
